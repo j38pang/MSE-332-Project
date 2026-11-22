@@ -10,12 +10,12 @@
     "source": "common estimate"
   },
   "demand_growth_g": {
-    "value": 0.035,
+    "value": 0.015,
     "unit": "1/yr",
     "source": "campus plan"
   },
   "grid_max_G_max_kW": {
-    "value": 25000.0,
+    "value": 18000.0,
     "unit": "kW",
     "source": "assumed"
   },
@@ -43,16 +43,16 @@
   },
   "pv_site_fixed_cost_F_a": {
     "value": {
-      "F": 1440438,
-      "C": 857764,
-      "H": 348298,
-      "L": 201515,
-      "O": 402775,
-      "X": 765856,
-      "V": 170966,
-      "S": 134758,
-      "K": 174619,
-      "M": 187658,
+      "F": 1886929,
+      "C": 217022,
+      "H": 238434,
+      "L": 138304,
+      "O": 264643,
+      "X": 236062,
+      "V": 122233,
+      "S": 122233,
+      "K": 122233,
+      "M": 111714,
       "W": 224490
     },
     "unit": "$",
@@ -91,27 +91,27 @@
     "source": "researched"
   },
   "battery_energy_e_kWh": {
-    "value": 3916.0,
+    "value": 514,
     "unit": "kWh/module",
     "source": "researched"
   },
   "battery_power_p_kW": {
-    "value": 979,
+    "value": 125,
     "unit": "kW/module",
     "source": "researched"
   },
   "battery_max_modules_N_max": {
-    "value": 10,
+    "value": 100,
     "unit": "modules",
     "source": "based on UCSD"
   },
   "battery_charge_eff_mc": {
-    "value": 0.968,
+    "value": 0.95,
     "unit": "-",
     "source": "researched"
   },
   "battery_discharge_eff_md": {
-    "value": 0.968,
+    "value": 0.95,
     "unit": "-",
     "source": "researched"
   },
@@ -126,7 +126,7 @@
     "source": "researched"
   },
   "battery_cost_year1": {
-    "value": 1600000,
+    "value": 212000,
     "unit": "$/module",
     "source": "tesla battery"
   },
@@ -136,7 +136,7 @@
     "source": "ignored"
   },
   "battery_om_per_module_yr": {
-    "value": 57761,
+    "value": 7375,
     "unit": "$/module/yr",
     "source": "researched"
   },
@@ -441,38 +441,38 @@
       ]
     },
     "unit": "$/kW",
-    "source": "DERIVED from the entries above (placeholders until those are filled)"
+    "source": "DERIVED from the parameters"
   },
   "battery_cost_K_B_y": {
     "value": [
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000,
-      1600000
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000,
+      212000
     ],
     "unit": "$/module",
-    "source": "DERIVED from the entries above (placeholders until those are filled)"
+    "source": "DERIVED from the parameters"
   },
   "battery_capacity_share_q_s": {
     "value": [
@@ -493,7 +493,7 @@
       0.6499999999999999
     ],
     "unit": "-",
-    "source": "DERIVED from the entries above (placeholders until those are filled)"
+    "source": "DERIVED from the parameters"
   },
   "pv_salvage_sigma_PV_y": {
     "value": [
@@ -524,7 +524,7 @@
       0.96
     ],
     "unit": "-",
-    "source": "DERIVED from the entries above (placeholders until those are filled)"
+    "source": "DERIVED from the parameters"
   },
   "battery_salvage_sigma_B_y": {
     "value": [
@@ -555,7 +555,7 @@
       0.9333333333333333
     ],
     "unit": "-",
-    "source": "DERIVED from the entries above (placeholders until those are filled)"
+    "source": "DERIVED from the parameters"
   },
   "tou_price_c_b": {
     "value": [
@@ -567,7 +567,7 @@
       0.189
     ],
     "unit": "$/kWh",
-    "source": "OEB RPP, Nov 1 2026 - Oct 31 2027 (verify); buckets 0-2 winter off/mid/on, 3-5 summer off/mid/on"
+    "source": "OEB RPP"
   },
   "data_summary": {
     "value": {

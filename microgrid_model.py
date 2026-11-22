@@ -12,8 +12,6 @@ real days each one stands for, weights sum to 365). Every hourly sum over the ye
     sum_t f_t  ->  sum_p weight_p * sum_h f_{p,h}
 and the battery state of charge is cyclic within each representative day (SOC at the end of hour 23 = SOC
 before hour 0), which replaces the report's yearly cycle SOC_0 = SOC_|T|.
-
-Run from the project root (next to prepare_data.py):  python microgrid_model.py
 """
 import json
 from pathlib import Path
@@ -30,21 +28,13 @@ ROOT = Path(__file__).resolve().parent
 PROC = ROOT / "processed"
 OUT = ROOT / "results"
 
-DEMAND_GROWTH = 0.015        # overrides parameters.json (was 0.035). Also change it in prepare_data.py PARAMS.
-PV_SCENARIO = "avg"          # "avg" = mean of the 3 EV3 years (report assumption), or "cf_y1" / "cf_y2" / "cf_y3"
+PV_SCENARIO = "cf_y1"          # "avg" = mean of the 3 EV3 years (report assumption), or "cf_y1" / "cf_y2" / "cf_y3"
 OBJECTIVE = "cost"           # "cost" = min total NPV cost (Z);  "grid" = min total grid energy (w)
-USE_NREL_BATTERY_COST = False # True: K^B_y falls on NREL ATB mid-case path; False: constant value from parameters.json
 STRICT_SITE_OPENING = True   # True: report constraint (b) x[a,y] <= C_a z[a,y] (a site is built out in the year it opens)
                              # False: x[a,y] <= C_a * (sum_{j<=y} z[a,j]) (PV can be added to an opened site later)
-N_YEARS = None               # None = full horizon from parameters.json; set e.g. 2 for a quick test
 TIME_LIMIT_S = 600
 MIP_GAP = 0.005
 
-# K^B_y, CAD per Megapack 2 XL 4-h module: 3,916 kWh x NREL 2025 mid-case $/kWh (2024 USD) x 1.37 CAD/USD.
-# Year 1 = 2027. Source: Cole, Ramasamy & Turan (2025), NREL/TP-6A40-93281, Table 2.
-NREL_KB_MID_CAD = [1614841, 1571922, 1534371, 1496819, 1459267, 1421715, 1378796, 1341244, 1303692, 1282233,
-                   1255408, 1233948, 1212489, 1185664, 1164205, 1142745, 1121286, 1094461, 1073002, 1051542,
-                   1024717, 1003258, 981798, 954974, 944244]
 
 
 # =============================================================================
@@ -56,7 +46,7 @@ def load_inputs():
     prm = {k: v["value"] for k, v in raw.items()}
     rep = pd.read_csv(PROC / "rep_periods.csv")
 
-    H = N_YEARS or int(prm["horizon_years"])
+    H = int(prm["horizon_years"])
     years = list(range(1, H + 1))
     sites = list(prm["pv_site_capacity_C_a_kW"].keys())
     periods = sorted(int(p) for p in rep["p"].unique())
@@ -65,14 +55,14 @@ def load_inputs():
     rep = rep.set_index(["p", "h"]).sort_index()
     cf = rep[["cf_y1", "cf_y2", "cf_y3"]].mean(axis=1) if PV_SCENARIO == "avg" else rep[PV_SCENARIO]
 
-    KB = NREL_KB_MID_CAD if USE_NREL_BATTERY_COST else prm["battery_cost_K_B_y"]
+    KB = prm["battery_cost_K_B_y"]
     d = dict(
         years=years, sites=sites, periods=periods, hours=hours, H_full=int(prm["horizon_years"]),
         w={p: float(rep.loc[(p, 0), "weight"]) for p in periods},
         D={(p, h): float(rep.loc[(p, h), "demand_kw"]) for p in periods for h in hours},
         CF={(p, h): float(cf.loc[(p, h)]) for p in periods for h in hours},
         c={(p, h): float(rep.loc[(p, h), "price_per_kwh"]) for p in periods for h in hours},
-        g=DEMAND_GROWTH, r=prm["discount_rate_r"], Gmax=prm["grid_max_G_max_kW"], x0=prm["pv_existing_x0_kW"],
+        g=prm["demand_growth_g"], r=prm["discount_rate_r"], Gmax=prm["grid_max_G_max_kW"], x0=prm["pv_existing_x0_kW"],
         C=prm["pv_site_capacity_C_a_kW"], F=prm["pv_site_fixed_cost_F_a"],
         KPV={a: prm["pv_cost_K_PV_a_y"][a] for a in sites},
         oPV=prm["pv_om_per_kW_yr"],
@@ -95,17 +85,17 @@ def build(d):
     L, H = d["L"], d["H_full"]
     m = gp.Model("UW_microgrid")
 
-    # ---- design variables
+    # design variables
     x = m.addVars(A, Y, lb=0, name="x")                       # PV kW bought at site a in year y
     z = m.addVars(A, Y, vtype=GRB.BINARY, name="z")           # site a opened in year y
     n = m.addVars(Y, lb=0, ub=d["Nmax"], vtype=GRB.INTEGER, name="n")  # battery modules bought in year y
-    # ---- operating variables (every rep hour, every year)
+    # operating variables (every rep hour, every year)
     G = m.addVars(T, Y, lb=0, ub=d["Gmax"], name="G")         # grid import kW (ub = grid connection limit)
     V = m.addVars(T, Y, lb=0, name="V")                       # solar used kW
     Pch = m.addVars(T, Y, lb=0, name="Pch")
     Pdis = m.addVars(T, Y, lb=0, name="Pdis")
     SOC = m.addVars(T, Y, lb=0, name="SOC")                   # kWh at the end of hour h
-    # ---- capacity bookkeeping (defined by equality constraints)
+    # capacity bookkeeping (defined by equality constraints)
     X = m.addVars(Y, lb=0, name="X")                          # cumulative new PV kW
     N = m.addVars(Y, lb=0, name="N")                          # battery modules in service
     E = m.addVars(Y, lb=0, name="E")                          # faded battery energy capacity kWh
@@ -117,7 +107,7 @@ def build(d):
         m.addConstr(E[y] == d["e"] * gp.quicksum(d["q"][y - j] * n[j] for j in alive[y]), name=f"Edef[{y}]")
         m.addConstr(N[y] <= d["Nmax"], name=f"Nmax[{y}]")
 
-    # ---- PV site opening and area limits, report (a)-(c)
+    # PV site opening and area limits, report
     for a in A:
         Ca = d["C"][a]
         m.addConstr(x.sum(a, "*") <= Ca * z.sum(a, "*"), name=f"siteArea[{a}]")          # (a)
@@ -126,7 +116,7 @@ def build(d):
             rhs = Ca * z[a, y] if STRICT_SITE_OPENING else Ca * gp.quicksum(z[a, j] for j in Y if j <= y)
             m.addConstr(x[a, y] <= rhs, name=f"siteOpen[{a},{y}]")                       # (b)
 
-    # ---- hourly operation
+    # hourly operation
     for y in Y:
         grow = (1 + d["g"]) ** (y - 1)
         for p in Pp:
@@ -141,7 +131,7 @@ def build(d):
                 m.addConstr(Pch[(*t, y)] <= d["pB"] * N[y], name=f"chMax[{p},{h},{y}]")
                 m.addConstr(Pdis[(*t, y)] <= d["pB"] * N[y], name=f"disMax[{p},{h},{y}]")
 
-    # ---- objectives
+    # objectives
     disc = {y: 1 / (1 + d["r"]) ** y for y in Y}
     grid_cost = {y: gp.quicksum(d["w"][p] * d["c"][(p, h)] * G[p, h, y] for p in Pp for h in Hh) for y in Y}
     yearly = {y: grid_cost[y]

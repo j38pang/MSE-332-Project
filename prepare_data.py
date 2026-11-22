@@ -30,7 +30,7 @@ K_REP_DAYS = 12 # number of representative days
 # OEB TOU prices ($/kWh) Nov 1 2026 - Oct 31 2027: off-peak, mid-peak, on-peak.
 TOU_PRICE = [0.091, 0.146, 0.189]
 
-SCEN = ["cf_y1", "cf_y2", "cf_y3"]# the three PV scenarios
+SCEN = ["cf_y1", "cf_y2", "cf_y3"] # the three PV scenarios
 SITES = ["F", "C", "H", "L", "O", "X", "V", "S", "K", "M", "W"] # ground field + 9 parking lots
 HORIZON = 25  # planning years
 
@@ -43,13 +43,13 @@ def P(value, unit, source="PLACEHOLDER"):
 
 
 PARAMS = {
-    # ---- general
+    # general
     "horizon_years":              P(HORIZON, "years", "model decision"),
     "discount_rate_r":            P(0.04, "1/yr", "common estimate"),
-    "demand_growth_g":            P(0.035, "1/yr", "campus plan"),
-    "grid_max_G_max_kW":          P(25000.0, "kW", 'assumed'),
+    "demand_growth_g":            P(0.015, "1/yr", "campus plan"),
+    "grid_max_G_max_kW":          P(18000.0, "kW", 'assumed'),
 
-    # ---- PV
+    # PV
     "pv_existing_x0_kW":          P(60, "kW", 'doc'),
     "pv_site_capacity_C_a_kW":    P({"F": 10308,
                                       "C": 2485,
@@ -88,17 +88,17 @@ PARAMS = {
     "pv_om_per_kW_yr":            P(21, "$/kW/yr", "website"),
     "pv_life_years":              P(25, "years", 'researched'), # used for salvage
 
-    # ---- battery module
-    "battery_energy_e_kWh":       P(3916.0, "kWh/module", 'researched'),
-    "battery_power_p_kW":         P(979, "kW/module", 'researched'),
-    "battery_max_modules_N_max":  P(10, "modules", "based on UCSD"),
-    "battery_charge_eff_mc":      P(0.968, "-", 'researched'),
-    "battery_discharge_eff_md":   P(0.968, "-", 'researched'),
+    # battery module
+    "battery_energy_e_kWh":       P(514, "kWh/module", 'researched'),
+    "battery_power_p_kW":         P(125, "kW/module", 'researched'),
+    "battery_max_modules_N_max":  P(100, "modules", "based on UCSD"),
+    "battery_charge_eff_mc":      P(0.95, "-", 'researched'),
+    "battery_discharge_eff_md":   P(0.95, "-", 'researched'),
     "battery_life_L_years":       P(15, "years", 'researched'),
     "battery_fade_per_year":      P(0.025, "1/yr", 'researched'), # capacity lost per year of age
-    "battery_cost_year1":         P(1600000, "$/module", 'tesla battery'), 
+    "battery_cost_year1":         P(212000, "$/module", 'tesla battery'), 
     "battery_cost_annual_change": P(0, "1/yr", 'ignored'),
-    "battery_om_per_module_yr":   P(57761, "$/module/yr", 'researched'),
+    "battery_om_per_module_yr":   P(7375, "$/module/yr", 'researched'),
 }
 
 
@@ -107,7 +107,7 @@ def derive_params(params, df):
     Year-indexed lists: element 0 = year 1. q_s list: element s = share of capacity left at age s."""
     v = lambda k: params[k]["value"]
     years = range(1, HORIZON + 1)
-    src = "DERIVED from the entries above (placeholders until those are filled)"
+    src = "DERIVED from the parameters"
     d = {}
 
     d["pv_cost_K_PV_a_y"] = P({a: [v("pv_cost_year1_per_kW")[a] * (1 + v("pv_cost_annual_change")) ** (y - 1)
@@ -122,8 +122,7 @@ def derive_params(params, df):
                                         for y in years], "-", src)
 
     # from the data / OEB
-    d["tou_price_c_b"] = P(TOU_PRICE * 2, "$/kWh",
-                           "OEB RPP, Nov 1 2026 - Oct 31 2027; buckets 0-2 winter off/mid/on, 3-5 summer off/mid/on")
+    d["tou_price_c_b"] = P(TOU_PRICE * 2, "$/kWh", "OEB RPP")
     d["data_summary"] = P({
         "n_hours": int(len(df)),
         "demand_annual_kWh": float(df["demand_kw"].sum()),
@@ -233,7 +232,7 @@ def representative_days(df, k):
 
     peak = int(M["demand_kw"].max(axis=1).argmax())
     rest = np.array([i for i in range(365) if i != peak])
-    label = np.full(365, k - 1)                                   # cluster k-1 = the peak day alone
+    label = np.full(365, k - 1) # cluster k-1 = the peak day alone
     label[rest] = KMeans(k - 1, n_init=50, random_state=0).fit(X[rest]).labels_
 
     parts = []
@@ -246,7 +245,7 @@ def representative_days(df, k):
             **{s: M[s][m].mean(axis=0) for s in SCEN},
             "tou_bucket": M["tou_bucket"][med].astype(int),
             "price_per_kwh": M["price_per_kwh"][med]})))
-    parts.sort(key=lambda x: x[0])                                # chronological
+    parts.sort(key=lambda x: x[0])
     rep = pd.concat([d.assign(p=i) for i, (_, d) in enumerate(parts)], ignore_index=True)
     return rep[["p", "h", "weight", "demand_kw"] + SCEN + ["tou_bucket", "price_per_kwh"]]
 
