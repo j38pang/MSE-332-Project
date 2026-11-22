@@ -31,12 +31,12 @@ K_REP_DAYS = 12 # number of representative days
 TOU_PRICE = [0.091, 0.146, 0.189]
 
 SCEN = ["cf_y1", "cf_y2", "cf_y3"]# the three PV scenarios
-SITES = ["F", "C", "H", "L", "O", "X", "V", "S", "K", "M"] # ground field + 9 parking lots
+SITES = ["F", "C", "H", "L", "O", "X", "V", "S", "K", "M", "W"] # ground field + 9 parking lots
 HORIZON = 25  # planning years
 
 
 # =============================================================================
-# PARAMETERS  (everything marked PLACEHOLDER is a dummy value -- replace it and update "source")
+# PARAMETERS
 # =============================================================================
 def P(value, unit, source="PLACEHOLDER"):
     return {"value": value, "unit": unit, "source": source}
@@ -45,30 +45,60 @@ def P(value, unit, source="PLACEHOLDER"):
 PARAMS = {
     # ---- general
     "horizon_years":              P(HORIZON, "years", "model decision"),
-    "discount_rate_r":            P(0.05, "1/yr"), #UPDATE
-    "demand_growth_g":            P(0.035, "1/yr", ), # campus plan
-    "grid_max_G_max_kW":          P(25000.0, "kW"), # grid connection capacity # UPDATE
+    "discount_rate_r":            P(0.04, "1/yr", "common estimate"),
+    "demand_growth_g":            P(0.035, "1/yr", "campus plan"),
+    "grid_max_G_max_kW":          P(25000.0, "kW", 'assumed'),
 
     # ---- PV
-    "pv_existing_x0_kW":          P(0.0, "kW"),# existing EV3 roof
-    "pv_site_capacity_C_a_kW":    P({a: (5000.0 if a == "F" else 1000.0) for a in SITES}, "kW"),   # campus plan
-    "pv_site_fixed_cost_F_a":     P({a: 50000.0 for a in SITES}, "$"),   # site prep + interconnection
-    "pv_cost_year1_per_kW":       P({a: 1800.0 for a in SITES}, "$/kW"),
-    "pv_cost_annual_change":      P(-0.02, "1/yr"),                      # e.g. NREL ATB
-    "pv_om_per_kW_yr":            P(20.0, "$/kW/yr"),
-    "pv_life_years":              P(25, "years"),                        # used for salvage
+    "pv_existing_x0_kW":          P(60, "kW", 'doc'),
+    "pv_site_capacity_C_a_kW":    P({"F": 10308,
+                                      "C": 2485,
+                                      "H": 736, 
+                                      "L": 635, 
+                                      "O": 660, 
+                                      "X": 2052, 
+                                      "V": 227, 
+                                      "S": 228, 
+                                      "K": 273, 
+                                      "M": 615,
+                                      "W": 522}, "kW", "Mingyu's Calculations"),
+    "pv_site_fixed_cost_F_a":     P({"F": 1886929,
+                                      "C":217022,
+                                      "H":238434, 
+                                      "L":138304, 
+                                      "O":264643, 
+                                      "X":236062, 
+                                      "V":122233, 
+                                      "S":122233, 
+                                      "K":122233, 
+                                      "M": 111714,
+                                      "W": 224490}, "$", "Calculations"), 
+    "pv_cost_year1_per_kW":       P({"F":1250,
+                                      "C":2904,
+                                      "H":2904, 
+                                      "L":2904, 
+                                      "O":2904, 
+                                      "X":2904, 
+                                      "V":2904, 
+                                      "S":2904, 
+                                      "K":2904, 
+                                      "M": 2904,
+                                      "W": 2904}, "$/kW", "Calculations"), # Installation costs
+    "pv_cost_annual_change":      P(0, "1/yr", "ignored" ),
+    "pv_om_per_kW_yr":            P(21, "$/kW/yr", "website"),
+    "pv_life_years":              P(25, "years", 'researched'), # used for salvage
 
     # ---- battery module
-    "battery_energy_e_kWh":       P(1000.0, "kWh/module"),
-    "battery_power_p_kW":         P(500.0, "kW/module"),
-    "battery_max_modules_N_max":  P(20, "modules"),
-    "battery_charge_eff_mc":      P(0.95, "-"),
-    "battery_discharge_eff_md":   P(0.95, "-"),
-    "battery_life_L_years":       P(15, "years"),
-    "battery_fade_per_year":      P(0.02, "1/yr"), # capacity lost per year of age
-    "battery_cost_year1":         P(500000.0, "$/module"),
-    "battery_cost_annual_change": P(-0.03, "1/yr"),
-    "battery_om_per_module_yr":   P(5000.0, "$/module/yr"),
+    "battery_energy_e_kWh":       P(3916.0, "kWh/module", 'researched'),
+    "battery_power_p_kW":         P(979, "kW/module", 'researched'),
+    "battery_max_modules_N_max":  P(10, "modules", "based on UCSD"),
+    "battery_charge_eff_mc":      P(0.968, "-", 'researched'),
+    "battery_discharge_eff_md":   P(0.968, "-", 'researched'),
+    "battery_life_L_years":       P(15, "years", 'researched'),
+    "battery_fade_per_year":      P(0.025, "1/yr", 'researched'), # capacity lost per year of age
+    "battery_cost_year1":         P(1600000, "$/module", 'tesla battery'), 
+    "battery_cost_annual_change": P(0, "1/yr", 'ignored'),
+    "battery_om_per_module_yr":   P(57761, "$/module/yr", 'researched'),
 }
 
 
@@ -87,14 +117,13 @@ def derive_params(params, df):
     d["battery_capacity_share_q_s"] = P([max(0.0, 1 - v("battery_fade_per_year") * s)
                                          for s in range(v("battery_life_L_years"))], "-", src)
     # salvage: straight-line remaining-life fraction at the end of the horizon (age = HORIZON - y + 1).
-    # PLACEHOLDER RULE -- replace with the NREL ATB values when we have them.
     d["pv_salvage_sigma_PV_y"] = P([max(0.0, 1 - (HORIZON - y + 1) / v("pv_life_years")) for y in years], "-", src)
     d["battery_salvage_sigma_B_y"] = P([max(0.0, 1 - (HORIZON - y + 1) / v("battery_life_L_years"))
                                         for y in years], "-", src)
 
     # from the data / OEB
     d["tou_price_c_b"] = P(TOU_PRICE * 2, "$/kWh",
-                           "OEB RPP, Nov 1 2026 - Oct 31 2027 (verify); buckets 0-2 winter off/mid/on, 3-5 summer off/mid/on")
+                           "OEB RPP, Nov 1 2026 - Oct 31 2027; buckets 0-2 winter off/mid/on, 3-5 summer off/mid/on")
     d["data_summary"] = P({
         "n_hours": int(len(df)),
         "demand_annual_kWh": float(df["demand_kw"].sum()),
@@ -119,7 +148,7 @@ def load_demand(path):
     body.columns = [str(c).strip().lower() for c in raw.iloc[hdr]]
     body = body.dropna(subset=["date"])
 
-    def to_td(s):                                   # "0:15", "00:15:00", "24:00"
+    def to_td(s):
         hh, mm = str(s).strip().split(":")[:2]
         td = pd.Timedelta(hours=int(hh), minutes=int(mm))
         return td if td > pd.Timedelta(0) else pd.Timedelta(hours=24)   # a 00:00 stamp is end-of-day (24:00)
@@ -252,8 +281,6 @@ def main():
     print(f"Saved model_hourly.csv ({len(df)} rows), rep_periods.csv ({K_REP_DAYS} days) "
           f"and parameters.json to {OUT_DIR}\n")
     check(df, rep)
-    todo = [k for k, p in PARAMS.items() if p["source"] == "PLACEHOLDER"]
-    print(f"\n{len(todo)} parameters are still PLACEHOLDERS: {', '.join(todo)}")
 
 
 if __name__ == "__main__":
