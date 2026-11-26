@@ -29,7 +29,10 @@ PROC = ROOT / "processed"
 OUT = ROOT / "results"
 
 PV_SCENARIO = "cf_y3"          # "avg" = mean of the 3 EV3 years (report assumption), or "cf_y1" / "cf_y2" / "cf_y3"
-OBJECTIVE = "cost"           # "cost" = min total NPV cost (Z);  "grid" = min total grid energy (w)
+OBJECTIVE = "cost"            # "cost" = min NPV cost (Z);  "grid" = min total grid energy;  "peak" = min grid draw in the summer window
+PEAK_MONTHS = [6, 7, 8, 9]    # June-September
+PEAK_HOURS = list(range(16, 19))   # hour-start 14..18 = 2pm-7pm (hour h means h:00-h+1:00)
+REP_FILE = "rep_periods_sequential.csv" if OBJECTIVE == "peak" else "rep_periods.csv"
 STRICT_SITE_OPENING = True   # True: report constraint (b) x[a,y] <= C_a z[a,y] (a site is built out in the year it opens)
                              # False: x[a,y] <= C_a * (sum_{j<=y} z[a,j]) (PV can be added to an opened site later)
 TIME_LIMIT_S = 600
@@ -44,12 +47,15 @@ def load_inputs():
     with open(PROC / "parameters.json") as f:
         raw = json.load(f)
     prm = {k: v["value"] for k, v in raw.items()}
-    rep = pd.read_csv(PROC / "rep_periods.csv")
+    rep = pd.read_csv(PROC / REP_FILE)
 
     H = int(prm["horizon_years"])
     years = list(range(1, H + 1))
     sites = list(prm["pv_site_capacity_C_a_kW"].keys())
     periods = sorted(int(p) for p in rep["p"].unique())
+    if OBJECTIVE == "peak":
+        assert len(periods) == 12, "peak objective assumes one period per calendar month (K_SEQ_DAYS=12, SEQ_ADD_PEAK_DAY=False)"
+    peak_periods = [mth - 1 for mth in PEAK_MONTHS]   # sequential file: p = 0..11 = Jan..Dec
     hours = list(range(24))
 
     rep = rep.set_index(["p", "h"]).sort_index()
@@ -71,6 +77,7 @@ def load_inputs():
         L=int(prm["battery_life_L_years"]), q=prm["battery_capacity_share_q_s"],
         KB=KB, oB=prm["battery_om_per_module_yr"],
         sPV=prm["pv_salvage_sigma_PV_y"], sB=prm["battery_salvage_sigma_B_y"],
+        peak_periods=peak_periods, peak_hours=PEAK_HOURS,
     )
     assert abs(sum(d["w"].values()) - 365) < 1e-6, "representative-day weights should sum to 365"
     return d
@@ -144,12 +151,13 @@ def build(d):
         (1 / (1 + d["r"]) ** H) * gp.quicksum(d["sB"][y - 1] * d["KB"][y - 1] * n[y] for y in Y)
     Z = gp.quicksum(disc[y] * yearly[y] for y in Y) - salvage
     w_grid = gp.quicksum(d["w"][p] * G[p, h, y] for p in Pp for h in Hh for y in Y)
+    w_peak = gp.quicksum(d["w"][p] * G[p, h, y] for p in d["peak_periods"] for h in d["peak_hours"] for y in Y)   # kWh drawn in the window, all 25 yrs
 
-    m.setObjective(Z if OBJECTIVE == "cost" else w_grid, GRB.MINIMIZE)
+    m.setObjective({"cost": Z, "grid": w_grid, "peak": w_peak}[OBJECTIVE], GRB.MINIMIZE)
     m.Params.TimeLimit, m.Params.MIPGap = TIME_LIMIT_S, MIP_GAP
 
     v = dict(x=x, z=z, n=n, G=G, V=V, Pch=Pch, Pdis=Pdis, SOC=SOC, X=X, N=N, E=E)
-    exprs = dict(Z=Z, w_grid=w_grid, grid_cost=grid_cost, salvage=salvage)
+    exprs = dict(Z=Z, w_grid=w_grid, w_peak=w_peak, grid_cost=grid_cost, salvage=salvage)
     return m, v, exprs
 
 
@@ -213,6 +221,7 @@ def report(m, v, ex, d):
     print(f"\nObjective ({OBJECTIVE}): {m.ObjVal:,.0f}   gap {m.MIPGap:.3%}   runtime {m.Runtime:.1f}s")
     print(f"Total NPV cost Z = ${ex['Z'].getValue():,.0f}  (salvage credit ${ex['salvage'].getValue():,.0f})")
     print(f"Total grid energy over horizon = {ex['w_grid'].getValue() / 1e6:,.1f} GWh\n")
+    print(f"Grid energy in Jun-Sep 2-7pm window over horizon = {ex['w_peak'].getValue() / 1e6:,.2f} GWh")
     print(res.round(1).to_string(index=False))
     print("\nValidation (should all be ~0 or negative):")
     print(f"  max energy-balance residual   {bal:.2e} kW")

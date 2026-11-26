@@ -25,7 +25,9 @@ DEMAND_CSV = ROOT / "Data" / "DemandProfile_UW.csv"
 PV_CSV = ROOT / "Data" / "SolarPVData.csv"
 OUT_DIR = ROOT / "processed"
 
-K_REP_DAYS = 12 # number of representative days
+K_REP_DAYS = 12        # representative days for the k-means version
+K_SEQ_DAYS = 12        # periods for the sequential version (12 = one per calendar month)
+SEQ_ADD_PEAK_DAY = False   # True -> extra 1-day period for the peak-demand day (K_SEQ_DAYS + 1 periods)
 
 # OEB TOU prices ($/kWh) Nov 1 2026 - Oct 31 2027: off-peak, mid-peak, on-peak.
 TOU_PRICE = [0.091, 0.146, 0.189]
@@ -44,13 +46,13 @@ def P(value, unit, source="PLACEHOLDER"):
 
 PARAMS = {
     # general
-    "horizon_years":              P(HORIZON, "years", "model decision"),
-    "discount_rate_r":            P(0.04, "1/yr", "common estimate"),
-    "demand_growth_g":            P(0.02, "1/yr", "campus plan"),
-    "grid_max_G_max_kW":          P(22000.0, "kW", 'assumed'),
+    "horizon_years":              P(HORIZON, "years", "model decision"), #25 years
+    "discount_rate_r":            P(0.04, "1/yr", "common estimate"), #0.04
+    "demand_growth_g":            P(0.02, "1/yr", "campus plan"), #0.02
+    "grid_max_G_max_kW":          P(22000.0, "kW", 'assumed'), #22000
 
     # PV
-    "pv_existing_x0_kW":          P(60, "kW", 'doc'),
+    "pv_existing_x0_kW":          P(60, "kW", 'doc'), #60
     "pv_site_capacity_C_a_kW":    P({"F": 10308,
                                       "C": 2485,
                                       "H": 736, 
@@ -73,32 +75,32 @@ PARAMS = {
                                       "K":170422, 
                                       "M":203678,
                                       "W":212828}, "$", "Calculations"), 
-    "pv_cost_year1_per_kW":       P({"F":1250,
-                                      "C":2904,
-                                      "H":2904, 
-                                      "L":2904, 
-                                      "O":2904, 
-                                      "X":2904, 
-                                      "V":2904, 
-                                      "S":2904, 
-                                      "K":2904, 
-                                      "M": 2904,
-                                      "W": 2904}, "$/kW", "Calculations"), # Installation costs
-    "pv_cost_annual_change":      P(0, "1/yr", "ignored" ),
-    "pv_om_per_kW_yr":            P(21, "$/kW/yr", "website"),
-    "pv_life_years":              P(25, "years", 'researched'), # used for salvage
+    "pv_cost_year1_per_kW":       P({"F":1250, #1250
+                                      "C":2904, #2904
+                                      "H":2904, #2904
+                                      "L":2904, #2904
+                                      "O":2904, #2904
+                                      "X":2904, #2904
+                                      "V":2904, #2904
+                                      "S":2904, #2904
+                                      "K":2904, #2904
+                                      "M": 2904,#2904
+                                      "W": 2904}, "$/kW", "Calculations"), # #2904
+    "pv_cost_annual_change":      P(0, "1/yr", "ignored" ), # 0
+    "pv_om_per_kW_yr":            P(21, "$/kW/yr", "website"), #21
+    "pv_life_years":              P(25, "years", 'researched'), # 25
 
     # battery module
-    "battery_energy_e_kWh":       P(514, "kWh/module", 'researched'),
-    "battery_power_p_kW":         P(125, "kW/module", 'researched'),
-    "battery_max_modules_N_max":  P(78, "modules", "based on UCSD"),
-    "battery_charge_eff_mc":      P(0.95, "-", 'researched'),
-    "battery_discharge_eff_md":   P(0.95, "-", 'researched'),
-    "battery_life_L_years":       P(15, "years", 'researched'),
-    "battery_fade_per_year":      P(0, "1/yr", 'researched'), # capacity lost per year of age
-    "battery_cost_year1":         P(212000, "$/module", 'tesla battery'), 
-    "battery_cost_annual_change": P(0, "1/yr", 'ignored'),
-    "battery_om_per_module_yr":   P(5300, "$/module/yr", 'researched'),
+    "battery_energy_e_kWh":       P(514, "kWh/module", 'researched'), #514
+    "battery_power_p_kW":         P(125, "kW/module", 'researched'), #125
+    "battery_max_modules_N_max":  P(78, "modules", "based on UCSD"), #78
+    "battery_charge_eff_mc":      P(0.95, "-", 'researched'), #0.95
+    "battery_discharge_eff_md":   P(0.95, "-", 'researched'), #0.95
+    "battery_life_L_years":       P(15, "years", 'researched'),#15
+    "battery_fade_per_year":      P(0, "1/yr", 'researched'), #0
+    "battery_cost_year1":         P(212000, "$/module", 'tesla battery'), # 212000
+    "battery_cost_annual_change": P(0, "1/yr", 'ignored'), #0
+    "battery_om_per_module_yr":   P(5300, "$/module/yr", 'researched'), #5300
 }
 
 
@@ -249,6 +251,40 @@ def representative_days(df, k):
     rep = pd.concat([d.assign(p=i) for i, (_, d) in enumerate(parts)], ignore_index=True)
     return rep[["p", "h", "weight", "demand_kw"] + SCEN + ["tou_bucket", "price_per_kwh"]]
 
+def representative_days_sequential(df, k=12, add_peak_day=False):
+    """k representative days built from consecutive blocks of the year (no clustering).
+    k == 12 -> one rep day per calendar month (weights = 31, 28, 31, ...).
+    other k -> k contiguous, near-equal blocks of the 365 days (np.array_split).
+    Demand and PV = block average (annual totals preserved exactly); price/bucket come from the
+    block's medoid day (identical for every day in a month, since the TOU schedule is seasonal).
+    add_peak_day=True removes the peak-demand day from its block and appends it as an extra
+    period (k + 1 periods total, weight 1), so the peak isn't averaged away."""
+    cols = ["demand_kw", "price_per_kwh", "tou_bucket"] + SCEN
+    M = {c: df[c].values.reshape(365, 24) for c in cols}
+
+    if k == 12:
+        month = df["timestamp"].dt.month.values.reshape(365, 24)[:, 0]   # month of each day (rows are Jan 1 -> Dec 31)
+        groups = [np.where(month == m)[0] for m in range(1, 13)]
+    else:
+        groups = np.array_split(np.arange(365), k)
+
+    if add_peak_day:
+        peak = int(M["demand_kw"].max(axis=1).argmax())
+        groups = [g[g != peak] for g in groups] + [np.array([peak])]
+
+    parts = []
+    for p, m in enumerate(groups):
+        price = M["price_per_kwh"][m]
+        med = m[np.argmin(np.linalg.norm(price - price.mean(axis=0), axis=1))]   # most representative price pattern
+        parts.append(pd.DataFrame({
+            "p": p, "h": range(24), "weight": len(m),
+            "demand_kw": M["demand_kw"][m].mean(axis=0),
+            **{s: M[s][m].mean(axis=0) for s in SCEN},
+            "tou_bucket": M["tou_bucket"][med].astype(int),
+            "price_per_kwh": M["price_per_kwh"][med]}))
+    rep = pd.concat(parts, ignore_index=True)
+    return rep[["p", "h", "weight", "demand_kw"] + SCEN + ["tou_bucket", "price_per_kwh"]]
+
 
 def check(df, rep):
     w = rep["weight"]
@@ -270,16 +306,23 @@ def main():
 
     df = build_hourly()
     rep = representative_days(df, K_REP_DAYS)
+    rep_seq = representative_days_sequential(df, K_SEQ_DAYS, add_peak_day=SEQ_ADD_PEAK_DAY)
+
     df.to_csv(OUT_DIR / "model_hourly.csv")
     rep.to_csv(OUT_DIR / "rep_periods.csv", index=False)
+    rep_seq.to_csv(OUT_DIR / "rep_periods_sequential.csv", index=False)
 
     params = {**PARAMS, **derive_params(PARAMS, df)}
     with open(OUT_DIR / "parameters.json", "w") as f:
         json.dump(params, f, indent=2)
 
-    print(f"Saved model_hourly.csv ({len(df)} rows), rep_periods.csv ({K_REP_DAYS} days) "
+    print(f"Saved model_hourly.csv ({len(df)} rows), rep_periods.csv ({K_REP_DAYS} days), "
+          f"rep_periods_sequential.csv ({rep_seq['p'].nunique()} periods) "
           f"and parameters.json to {OUT_DIR}\n")
+    print("K-means representative days:")
     check(df, rep)
+    print("\nSequential representative days:")
+    check(df, rep_seq)
 
 
 if __name__ == "__main__":
