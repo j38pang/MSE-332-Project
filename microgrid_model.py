@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent
 PROC = ROOT / "processed"
 OUT = ROOT / "results"
 
-PV_SCENARIO = "cf_y1"          # "avg" = mean of the 3 EV3 years (report assumption), or "cf_y1" / "cf_y2" / "cf_y3"
+PV_SCENARIO = "cf_y3"          # "avg" = mean of the 3 EV3 years (report assumption), or "cf_y1" / "cf_y2" / "cf_y3"
 OBJECTIVE = "cost"           # "cost" = min total NPV cost (Z);  "grid" = min total grid energy (w)
 STRICT_SITE_OPENING = True   # True: report constraint (b) x[a,y] <= C_a z[a,y] (a site is built out in the year it opens)
                              # False: x[a,y] <= C_a * (sum_{j<=y} z[a,j]) (PV can be added to an opened site later)

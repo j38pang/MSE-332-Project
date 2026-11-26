@@ -46,8 +46,8 @@ PARAMS = {
     # general
     "horizon_years":              P(HORIZON, "years", "model decision"),
     "discount_rate_r":            P(0.04, "1/yr", "common estimate"),
-    "demand_growth_g":            P(0.015, "1/yr", "campus plan"),
-    "grid_max_G_max_kW":          P(18000.0, "kW", 'assumed'),
+    "demand_growth_g":            P(0.02, "1/yr", "campus plan"),
+    "grid_max_G_max_kW":          P(22000.0, "kW", 'assumed'),
 
     # PV
     "pv_existing_x0_kW":          P(60, "kW", 'doc'),
@@ -61,18 +61,18 @@ PARAMS = {
                                       "S": 228, 
                                       "K": 273, 
                                       "M": 615,
-                                      "W": 522}, "kW", "Mingyu's Calculations"),
-    "pv_site_fixed_cost_F_a":     P({"F": 1886929,
-                                      "C":217022,
-                                      "H":238434, 
-                                      "L":138304, 
-                                      "O":264643, 
-                                      "X":236062, 
-                                      "V":122233, 
-                                      "S":122233, 
-                                      "K":122233, 
-                                      "M": 111714,
-                                      "W": 224490}, "$", "Calculations"), 
+                                      "W": 522}, "kW", "Calculations"),
+    "pv_site_fixed_cost_F_a":     P({"F": 4276258,
+                                      "C":797827,
+                                      "H":327005, 
+                                      "L":189957, 
+                                      "O":377685, 
+                                      "X":715685, 
+                                      "V":161302, 
+                                      "S":126957, 
+                                      "K":170422, 
+                                      "M":203678,
+                                      "W":212828}, "$", "Calculations"), 
     "pv_cost_year1_per_kW":       P({"F":1250,
                                       "C":2904,
                                       "H":2904, 
@@ -91,14 +91,14 @@ PARAMS = {
     # battery module
     "battery_energy_e_kWh":       P(514, "kWh/module", 'researched'),
     "battery_power_p_kW":         P(125, "kW/module", 'researched'),
-    "battery_max_modules_N_max":  P(100, "modules", "based on UCSD"),
+    "battery_max_modules_N_max":  P(78, "modules", "based on UCSD"),
     "battery_charge_eff_mc":      P(0.95, "-", 'researched'),
     "battery_discharge_eff_md":   P(0.95, "-", 'researched'),
     "battery_life_L_years":       P(15, "years", 'researched'),
-    "battery_fade_per_year":      P(0.025, "1/yr", 'researched'), # capacity lost per year of age
+    "battery_fade_per_year":      P(0, "1/yr", 'researched'), # capacity lost per year of age
     "battery_cost_year1":         P(212000, "$/module", 'tesla battery'), 
     "battery_cost_annual_change": P(0, "1/yr", 'ignored'),
-    "battery_om_per_module_yr":   P(7375, "$/module/yr", 'researched'),
+    "battery_om_per_module_yr":   P(5300, "$/module/yr", 'researched'),
 }
 
 
