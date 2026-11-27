@@ -1,0 +1,53 @@
+{
+  "outage_fraction": {
+    "value": 0.5,
+    "unit": "share of grid capacity lost",
+    "source": "scenario setting (manual)"
+  },
+  "outage_basis": {
+    "value": "gmax",
+    "unit": "-",
+    "source": "scenario setting (manual)"
+  },
+  "value_of_lost_load_VoLL": {
+    "value": 25.0,
+    "unit": "$/kWh",
+    "source": "Sullivan, Schellenberg & Blundell (2015), LBNL/Nexant, Medium & Large C&I, 4-hr outage US$12.1/kWh (2013$) x ~1.4 inflation x ~1.38 USD->CAD, rounded"
+  },
+  "battery_soc_at_outage_start": {
+    "value": 0.5,
+    "unit": "share of usable battery energy",
+    "source": "assumption: outages are unplanned, battery is mid-cycle when one hits"
+  },
+  "n_runs": {
+    "value": 200,
+    "unit": "runs",
+    "source": "model decision"
+  },
+  "n_outages_range": {
+    "value": [
+      25,
+      50
+    ],
+    "unit": "outages per 25-yr run",
+    "source": "project scenario"
+  },
+  "duration_range_h": {
+    "value": [
+      4,
+      8
+    ],
+    "unit": "hours",
+    "source": "project scenario"
+  },
+  "min_gap_h": {
+    "value": 24,
+    "unit": "hours",
+    "source": "model decision"
+  },
+  "seed": {
+    "value": 332,
+    "unit": "-",
+    "source": "model decision"
+  }
+}

@@ -216,6 +216,11 @@ def report(m, v, ex, d):
              "discharge_kW": v["Pdis"][p, h, y].X, "SOC_kWh": v["SOC"][p, h, y].X}
             for y in (Y[0], Y[-1]) for p, h in T]
     pd.DataFrame(disp).to_csv(OUT / "dispatch_first_last_year.csv", index=False)
+    # battery state of charge in every rep hour of every year (read by stress_test.py for the SOC when an outage hits).
+    # Only meaningful with rep_periods.csv, because processed/day_map.csv maps real days onto those rep days.
+    if REP_FILE == "rep_periods.csv":
+        pd.DataFrame([{"year": y, "p": p, "h": h, "SOC_kWh": v["SOC"][p, h, y].X, "E_kWh": v["E"][y].X}
+                      for y in Y for p, h in T]).to_csv(OUT / "soc_all_years.csv", index=False)
 
     pd.set_option("display.width", 200)
     print(f"\nObjective ({OBJECTIVE}): {m.ObjVal:,.0f}   gap {m.MIPGap:.3%}   runtime {m.Runtime:.1f}s")
@@ -229,7 +234,8 @@ def report(m, v, ex, d):
     print(f"  max power above battery limit {pwr:.2e} kW")
     print(f"  max grid above connection     {grid:.2e} kW")
     print(f"  hours charging & discharging at once: {simul}")
-    print(f"\nWrote yearly_results.csv, pv_sites.csv, dispatch_first_last_year.csv to {OUT}")
+    print(f"\nWrote yearly_results.csv, pv_sites.csv, dispatch_first_last_year.csv"
+          f"{', soc_all_years.csv' if REP_FILE == 'rep_periods.csv' else ''} to {OUT}")
     assert bal < tol and socx < tol and pwr < tol and grid < tol, "validation failed"
 
 

@@ -101,7 +101,7 @@
     "source": "researched"
   },
   "battery_max_modules_N_max": {
-    "value": 780000000,
+    "value": 78,
     "unit": "modules",
     "source": "based on UCSD"
   },

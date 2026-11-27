@@ -8,6 +8,7 @@ Reads (Data/):
 Writes (processed/):
     model_hourly.csv   8760 rows, Jan 1 -> Dec 31: demand_kw, cf_y1, cf_y2, cf_y3, tou_bucket, price_per_kwh
     rep_periods.csv    K representative days x 24 h: same columns + p, h, weight (days represented; sum = 365)
+    day_map.csv        365 rows: which k-means representative day p each real day (Jan 1 -> Dec 31) belongs to
     parameters.json    every model parameter as {value, unit, source} for the Gurobi script
 """
 import json
@@ -226,7 +227,8 @@ def build_hourly():
 # =============================================================================
 def representative_days(df, k):
     """k representative days. Demand and PV = cluster average (annual totals preserved exactly);
-    the peak-demand day is forced in as its own real day; price/bucket come from the cluster's medoid."""
+    the peak-demand day is forced in as its own real day; price/bucket come from the cluster's medoid.
+    Also returns day_map: the final p of every real day (day 0 = Jan 1), used by stress_test.py."""
     cols = ["demand_kw", "price_per_kwh", "tou_bucket"] + SCEN
     M = {c: df[c].values.reshape(365, 24) for c in cols}
     z = lambda a: (a - a.mean()) / a.std()
@@ -241,15 +243,18 @@ def representative_days(df, k):
     for c in range(k):
         m = np.where(label == c)[0]
         med = m[np.argmin(np.linalg.norm(X[m] - X[m].mean(axis=0), axis=1))]
-        parts.append((med, pd.DataFrame({
+        parts.append((med, c, pd.DataFrame({
             "h": range(24), "weight": len(m),
             "demand_kw": M["demand_kw"][m].mean(axis=0),
             **{s: M[s][m].mean(axis=0) for s in SCEN},
             "tou_bucket": M["tou_bucket"][med].astype(int),
             "price_per_kwh": M["price_per_kwh"][med]})))
-    parts.sort(key=lambda x: x[0])
-    rep = pd.concat([d.assign(p=i) for i, (_, d) in enumerate(parts)], ignore_index=True)
-    return rep[["p", "h", "weight", "demand_kw"] + SCEN + ["tou_bucket", "price_per_kwh"]]
+    parts.sort(key=lambda x: x[0])                                # chronological
+    rep = pd.concat([d.assign(p=i) for i, (_, _, d) in enumerate(parts)], ignore_index=True)
+    # k-means label c -> final p (after the chronological re-sort), then look up every real day
+    p_of_label = {c: i for i, (_, c, _) in enumerate(parts)}
+    day_map = pd.DataFrame({"day": range(365), "p": [p_of_label[c] for c in label]})
+    return rep[["p", "h", "weight", "demand_kw"] + SCEN + ["tou_bucket", "price_per_kwh"]], day_map
 
 def representative_days_sequential(df, k=12, add_peak_day=False):
     """k representative days built from consecutive blocks of the year (no clustering).
@@ -305,19 +310,22 @@ def main():
     OUT_DIR.mkdir(exist_ok=True)
 
     df = build_hourly()
-    rep = representative_days(df, K_REP_DAYS)
+    rep, day_map = representative_days(df, K_REP_DAYS)
     rep_seq = representative_days_sequential(df, K_SEQ_DAYS, add_peak_day=SEQ_ADD_PEAK_DAY)
 
     df.to_csv(OUT_DIR / "model_hourly.csv")
     rep.to_csv(OUT_DIR / "rep_periods.csv", index=False)
     rep_seq.to_csv(OUT_DIR / "rep_periods_sequential.csv", index=False)
+    day_map.to_csv(OUT_DIR / "day_map.csv", index=False)
+    assert (day_map.p.value_counts().sort_index().values == rep.groupby("p").weight.first().values).all(), \
+        "day_map does not match the rep-day weights"
 
     params = {**PARAMS, **derive_params(PARAMS, df)}
     with open(OUT_DIR / "parameters.json", "w") as f:
         json.dump(params, f, indent=2)
 
     print(f"Saved model_hourly.csv ({len(df)} rows), rep_periods.csv ({K_REP_DAYS} days), "
-          f"rep_periods_sequential.csv ({rep_seq['p'].nunique()} periods) "
+          f"rep_periods_sequential.csv ({rep_seq['p'].nunique()} periods), day_map.csv "
           f"and parameters.json to {OUT_DIR}\n")
     print("K-means representative days:")
     check(df, rep)
